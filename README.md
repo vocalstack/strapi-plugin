@@ -4,10 +4,8 @@ VocalStack for [Strapi](https://strapi.io) 5: a **Transcribe** button on every a
 
 ## Install
 
-Not on npm. Install from this repo; `dist/` is committed, so nothing builds on install (run `npm run build` and commit `dist/` with every change):
-
 ```sh
-npm i github:vocalstack/strapi-plugin
+npm i @vocalstack/strapi
 ```
 
 ```ts
