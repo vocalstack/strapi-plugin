@@ -69,6 +69,12 @@ declare const _default: {
                     transcriptionId: {
                         type: string;
                     };
+                    jobRecordingId: {
+                        type: string;
+                    };
+                    jobTranscriptionId: {
+                        type: string;
+                    };
                     transcribedAt: {
                         type: string;
                     };
@@ -304,7 +310,7 @@ declare const _default: {
             stop(fileId: number): Promise<import('./lib/types').StatusResponse>;
             checkJob(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData, recordingId: string): Promise<import('./lib/types').StatusResponse>;
             restore(file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData): Promise<import('./lib/types').StatusResponse>;
-            saveTranscript(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, recordingId: string): Promise<import('./lib/types').StatusResponse>;
+            saveTranscript(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData, recordingId: string): Promise<import('./lib/types').StatusResponse>;
             many(fileIds: number[]): Promise<Record<number, import('./lib/types').TranscriptData>>;
             pollAll(): Promise<void>;
             forget(fileId: number): Promise<void>;

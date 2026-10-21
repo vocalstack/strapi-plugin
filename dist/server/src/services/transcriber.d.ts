@@ -31,7 +31,7 @@ declare const transcriber: ({ strapi }: {
      * there was one (a new job only replaces it once done), or none.
      */
     restore(file: UploadFile, current: TranscriptData): Promise<StatusResponse>;
-    saveTranscript(client: VocalStackAPI, file: UploadFile, recordingId: string): Promise<StatusResponse>;
+    saveTranscript(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
     /** Statuses for several files at once (the Media Library list and the side panel). */
     many(fileIds: number[]): Promise<Record<number, TranscriptData>>;
     /**

@@ -1,9 +1,8 @@
-"use strict";
-const jsxRuntime = require("react/jsx-runtime");
-const designSystem = require("@strapi/design-system");
-const admin = require("@strapi/strapi/admin");
-const reactRouterDom = require("react-router-dom");
-const react = require("react");
+import { jsxs, jsx } from "react/jsx-runtime";
+import { Flex, Typography, Button, Box, ProgressBar, Link, LinkButton } from "@strapi/design-system";
+import { useFetchClient, useNotification, useRBAC } from "@strapi/strapi/admin";
+import { Link as Link$1 } from "react-router-dom";
+import { useState, useCallback, useEffect, useRef } from "react";
 const PLUGIN_ID = "vocalstack";
 const PERMISSIONS = {
   settings: [{ action: "plugin::vocalstack.settings", subject: null }],
@@ -19,17 +18,17 @@ function errorCode(err) {
   return err?.response?.data?.code;
 }
 function useConnection() {
-  const { get, post } = admin.useFetchClient();
-  const [connection, setConnection] = react.useState();
-  const [connecting, setConnecting] = react.useState(false);
-  const refresh = react.useCallback(
+  const { get, post } = useFetchClient();
+  const [connection, setConnection] = useState();
+  const [connecting, setConnecting] = useState(false);
+  const refresh = useCallback(
     () => get("/vocalstack/connection").then(
       (res) => setConnection(res.data),
       () => setConnection({ connected: false, enabled: false, oneClickConnect: false })
     ),
     [get]
   );
-  react.useEffect(() => {
+  useEffect(() => {
     void refresh();
     let channel;
     try {
@@ -44,13 +43,13 @@ function useConnection() {
     }
     return () => channel?.close();
   }, [refresh]);
-  react.useEffect(() => {
+  useEffect(() => {
     if (!connecting) return;
     const onFocus = () => void refresh().then(() => setConnecting(false));
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [connecting, refresh]);
-  const connect = react.useCallback(async () => {
+  const connect = useCallback(async () => {
     const tab = window.open("about:blank", "_blank");
     setConnecting(true);
     try {
@@ -79,17 +78,18 @@ const PHASES = {
 };
 const transcriptPath = (documentId) => `/content-manager/collection-types/plugin::vocalstack.transcript/${documentId}`;
 const FileTranscriber = ({ file, initial, showName }) => {
-  const { get, post } = admin.useFetchClient();
-  const { toggleNotification } = admin.useNotification();
-  const [transcript, setTranscript] = react.useState(initial ?? void 0);
-  const [loaded, setLoaded] = react.useState(initial !== void 0);
-  const [busy, setBusy] = react.useState(false);
-  const [stopping, setStopping] = react.useState(false);
-  const [progress, setProgress] = react.useState({});
-  const [error, setError] = react.useState();
-  const timer = react.useRef();
-  const alive = react.useRef(true);
-  const finish = react.useCallback(
+  const { get, post } = useFetchClient();
+  const { toggleNotification } = useNotification();
+  const [transcript, setTranscript] = useState(initial ?? void 0);
+  const [loaded, setLoaded] = useState(initial !== void 0);
+  const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [progress, setProgress] = useState({});
+  const [error, setError] = useState();
+  const timer = useRef();
+  const alive = useRef(true);
+  const finish = useCallback(
     (res) => {
       setTranscript(res.transcript);
       setBusy(false);
@@ -99,7 +99,7 @@ const FileTranscriber = ({ file, initial, showName }) => {
     },
     [file.name, toggleNotification]
   );
-  const poll = react.useCallback(async () => {
+  const poll = useCallback(async () => {
     clearTimeout(timer.current);
     if (!alive.current) return;
     try {
@@ -120,7 +120,7 @@ const FileTranscriber = ({ file, initial, showName }) => {
       } else timer.current = setTimeout(poll, POLL_MS * 2);
     }
   }, [file.id, finish, get]);
-  react.useEffect(() => {
+  useEffect(() => {
     alive.current = true;
     if (initial === void 0) {
       get(`/vocalstack/status/${file.id}`).then(
@@ -150,6 +150,7 @@ const FileTranscriber = ({ file, initial, showName }) => {
   const transcribe = async () => {
     setError(void 0);
     setBusy(true);
+    setStarting(true);
     setProgress({});
     try {
       const { data } = await post(`/vocalstack/transcribe/${file.id}`);
@@ -159,6 +160,8 @@ const FileTranscriber = ({ file, initial, showName }) => {
     } catch (err) {
       setBusy(false);
       setError(errorCode(err) === "not_connected" ? `${errorMessage(err)} (Settings → VocalStack)` : errorMessage(err));
+    } finally {
+      setStarting(false);
     }
   };
   const stop = async () => {
@@ -177,26 +180,26 @@ const FileTranscriber = ({ file, initial, showName }) => {
   };
   const status = transcript?.status;
   const shownError = error ?? (status === "failed" ? transcript?.error ?? void 0 : void 0);
-  return /* @__PURE__ */ jsxRuntime.jsxs(designSystem.Flex, { alignItems: "stretch", direction: "column", gap: 2, width: "100%", children: [
-    showName && /* @__PURE__ */ jsxRuntime.jsx(designSystem.Typography, { ellipsis: true, fontWeight: "semiBold", textColor: "neutral800", title: file.name ?? void 0, variant: "omega", children: file.name ?? `File ${file.id}` }),
-    !busy && /* @__PURE__ */ jsxRuntime.jsx(designSystem.Flex, { gap: 2, wrap: "wrap", children: /* @__PURE__ */ jsxRuntime.jsx(designSystem.Button, { disabled: !loaded, onClick: transcribe, size: "S", variant: status === "done" ? "secondary" : "default", children: status === "done" ? "Transcribe again" : "Transcribe" }) }),
-    busy && /* @__PURE__ */ jsxRuntime.jsxs(designSystem.Box, { children: [
-      /* @__PURE__ */ jsxRuntime.jsxs(designSystem.Typography, { textColor: "neutral600", variant: "pi", children: [
+  return /* @__PURE__ */ jsxs(Flex, { alignItems: "stretch", direction: "column", gap: 2, width: "100%", children: [
+    showName && /* @__PURE__ */ jsx(Typography, { ellipsis: true, fontWeight: "semiBold", textColor: "neutral800", title: file.name ?? void 0, variant: "omega", children: file.name ?? `File ${file.id}` }),
+    !busy && /* @__PURE__ */ jsx(Flex, { gap: 2, wrap: "wrap", children: /* @__PURE__ */ jsx(Button, { disabled: !loaded, onClick: transcribe, size: "S", variant: status === "done" ? "secondary" : "default", children: status === "done" ? "Transcribe again" : "Transcribe" }) }),
+    busy && /* @__PURE__ */ jsxs(Box, { children: [
+      /* @__PURE__ */ jsxs(Typography, { textColor: "neutral600", variant: "pi", children: [
         PHASES[progress.phase ?? "queued"] ?? progress.phase,
         progress.pct ? ` · ${progress.pct}%` : "…",
         progress.audio?.totalS ? ` · ${clock(progress.audio.processedS)} of ${clock(progress.audio.totalS)}` : ""
       ] }),
-      /* @__PURE__ */ jsxRuntime.jsx(designSystem.Box, { paddingBottom: 2, paddingTop: 1, children: /* @__PURE__ */ jsxRuntime.jsx(designSystem.ProgressBar, { size: "S", value: progress.pct ?? 2 }) }),
-      /* @__PURE__ */ jsxRuntime.jsx(designSystem.Button, { disabled: stopping, onClick: stop, size: "S", variant: "tertiary", children: stopping ? "Stopping…" : "Stop" })
+      /* @__PURE__ */ jsx(Box, { paddingBottom: 2, paddingTop: 1, children: /* @__PURE__ */ jsx(ProgressBar, { size: "S", value: progress.pct ?? 2 }) }),
+      /* @__PURE__ */ jsx(Button, { disabled: stopping || starting, onClick: stop, size: "S", variant: "tertiary", children: stopping ? "Stopping…" : "Stop" })
     ] }),
-    !busy && status === "done" && !shownError && /* @__PURE__ */ jsxRuntime.jsxs(designSystem.Typography, { textColor: "neutral600", variant: "pi", children: [
+    !busy && status === "done" && !shownError && /* @__PURE__ */ jsxs(Typography, { textColor: "neutral600", variant: "pi", children: [
       "Transcribed",
       transcript?.language ? ` (${transcript.language})` : "",
       ".",
       " ",
-      transcript?.documentId && /* @__PURE__ */ jsxRuntime.jsx(designSystem.Link, { tag: reactRouterDom.Link, to: transcriptPath(transcript.documentId), children: "Open the transcript" })
+      transcript?.documentId && /* @__PURE__ */ jsx(Link, { tag: Link$1, to: transcriptPath(transcript.documentId), children: "Open the transcript" })
     ] }),
-    shownError && /* @__PURE__ */ jsxRuntime.jsx(designSystem.Typography, { textColor: "danger600", variant: "pi", children: shownError })
+    shownError && /* @__PURE__ */ jsx(Typography, { textColor: "danger600", variant: "pi", children: shownError })
   ] });
 };
 function audioFiles(value, found = /* @__PURE__ */ new Map(), depth = 0) {
@@ -211,17 +214,17 @@ function audioFiles(value, found = /* @__PURE__ */ new Map(), depth = 0) {
   }
   return [...found.values()];
 }
-const PanelContent = ({ connection, connect, connecting, files }) => /* @__PURE__ */ jsxRuntime.jsx(designSystem.Flex, { alignItems: "stretch", direction: "column", gap: 4, width: "100%", children: !connection.connected ? connection.oneClickConnect ? /* @__PURE__ */ jsxRuntime.jsx(designSystem.Flex, { alignItems: "flex-start", direction: "column", gap: 2, children: /* @__PURE__ */ jsxRuntime.jsx(designSystem.LinkButton, { disabled: connecting, onClick: () => void connect().catch(() => void 0), size: "S", tag: "button", variant: "secondary", children: connecting ? "Waiting for VocalStack…" : "Connect VocalStack" }) }) : /* @__PURE__ */ jsxRuntime.jsx(designSystem.LinkButton, { size: "S", tag: reactRouterDom.Link, to: "/settings/vocalstack", variant: "secondary", children: "Connect VocalStack" }) : files.map((file) => /* @__PURE__ */ jsxRuntime.jsx(FileTranscriber, { file, showName: files.length > 1 }, file.id)) });
+const PanelContent = ({ connection, connect, connecting, files }) => /* @__PURE__ */ jsx(Flex, { alignItems: "stretch", direction: "column", gap: 4, width: "100%", children: !connection.connected ? connection.oneClickConnect ? /* @__PURE__ */ jsx(Flex, { alignItems: "flex-start", direction: "column", gap: 2, children: /* @__PURE__ */ jsx(LinkButton, { disabled: connecting, onClick: () => void connect().catch(() => void 0), size: "S", tag: "button", variant: "secondary", children: connecting ? "Waiting for VocalStack…" : "Connect VocalStack" }) }) : /* @__PURE__ */ jsx(LinkButton, { size: "S", tag: Link$1, to: "/settings/vocalstack", variant: "secondary", children: "Connect VocalStack" }) : files.map((file) => /* @__PURE__ */ jsx(FileTranscriber, { file, showName: files.length > 1 }, file.id)) });
 const TranscribePanel = ({ document }) => {
-  const { allowedActions, isLoading } = admin.useRBAC({ transcribe: PERMISSIONS.transcribe });
+  const { allowedActions, isLoading } = useRBAC({ transcribe: PERMISSIONS.transcribe });
   const { connect, connecting, connection } = useConnection();
   const files = audioFiles(document);
   if (!files.length || isLoading || !allowedActions.canTranscribe || !connection?.enabled) return null;
   return {
     title: "VocalStack",
-    content: /* @__PURE__ */ jsxRuntime.jsxs(designSystem.Flex, { alignItems: "stretch", direction: "column", gap: 3, width: "100%", children: [
-      /* @__PURE__ */ jsxRuntime.jsx(PanelContent, { connect, connecting, connection, files }),
-      connection.connected && /* @__PURE__ */ jsxRuntime.jsx(designSystem.Typography, { textColor: "neutral600", variant: "pi", children: "A file added since the last save shows here once the entry is saved." })
+    content: /* @__PURE__ */ jsxs(Flex, { alignItems: "stretch", direction: "column", gap: 3, width: "100%", children: [
+      /* @__PURE__ */ jsx(PanelContent, { connect, connecting, connection, files }),
+      connection.connected && /* @__PURE__ */ jsx(Typography, { textColor: "neutral600", variant: "pi", children: "A file added since the last save shows here once the entry is saved." })
     ] })
   };
 };
@@ -233,7 +236,7 @@ const plugin = {
       to: PLUGIN_ID,
       intlLabel: { id: `${PLUGIN_ID}.settings.link`, defaultMessage: "VocalStack" },
       permissions: PERMISSIONS.settings,
-      Component: () => Promise.resolve().then(() => require("./Settings-_i_Bs-rW.js"))
+      Component: () => import("./Settings-DeftinzX.mjs")
     });
   },
   bootstrap(app) {
@@ -244,8 +247,10 @@ const plugin = {
     return [];
   }
 };
-exports.FileTranscriber = FileTranscriber;
-exports.PERMISSIONS = PERMISSIONS;
-exports.errorMessage = errorMessage;
-exports.plugin = plugin;
-exports.useConnection = useConnection;
+export {
+  FileTranscriber as F,
+  PERMISSIONS as P,
+  errorMessage as e,
+  plugin as p,
+  useConnection as u
+};

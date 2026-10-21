@@ -4,7 +4,8 @@
  */
 export declare const DEFAULT_API_URL = "https://api.vocalstack.com";
 export declare const DEFAULT_DASHBOARD_URL = "https://app.vocalstack.com";
-export type JobState = 'cropping' | 'done' | 'failed' | 'fetching' | 'queued' | 'transcribing';
+/** `stopped`: its owner stopped it before it was done (here, or in the VocalStack dashboard). */
+export type JobState = 'cropping' | 'done' | 'failed' | 'fetching' | 'queued' | 'stopped' | 'transcribing';
 export type Job = {
     error?: null | string;
     /** Why a failed job failed; `stopped` when its owner stopped it. */
@@ -70,7 +71,7 @@ export declare class VocalStackAPI {
         spokenLanguage?: string;
     }): Promise<Transcription>;
     job(recordingId: string): Promise<Job>;
-    /** Stop a job before it is done. Its job fails with `stopped`; what was transcribed so far stays in VocalStack. */
+    /** Stop a job before it is done. Its state becomes `stopped`; what was transcribed so far stays in VocalStack. */
     stop(recordingId: string, reason?: string): Promise<unknown>;
     transcript(recordingId: string): Promise<Transcript>;
 }

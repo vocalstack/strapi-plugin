@@ -25,6 +25,8 @@ declare const _default: {
     "error": { "type": "text" },
     "recordingId": { "type": "string" },
     "transcriptionId": { "type": "string" },
+    "jobRecordingId": { "type": "string" },
+    "jobTranscriptionId": { "type": "string" },
     "transcribedAt": { "type": "datetime" }
   }
 }

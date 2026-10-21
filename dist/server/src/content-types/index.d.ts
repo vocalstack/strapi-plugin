@@ -57,6 +57,12 @@ declare const _default: {
                 transcriptionId: {
                     type: string;
                 };
+                jobRecordingId: {
+                    type: string;
+                };
+                jobTranscriptionId: {
+                    type: string;
+                };
                 transcribedAt: {
                     type: string;
                 };

@@ -33,7 +33,7 @@ Super Admins can use everything. For other roles, tick **Settings → Roles → 
 - **A Transcript collection type** (`plugin::vocalstack.transcript`), one entry per transcribed file, listed under **Content Manager → Transcript**:
   - `transcript`: text you can edit; paragraphs break on a speaker change or a pause.
   - `sentences`: `[{ start, end, speaker, text }]` in seconds.
-  - `file` (the media), `fileId`, `fileName`, `status` (`idle`, `processing`, `done`, `failed`), `language`, `error`, `recordingId`, `transcriptionId` and `transcribedAt`.
+  - `file` (the media), `fileId`, `fileName`, `status` (`idle`, `processing`, `done`, `failed`), `language`, `error`, `recordingId` and `transcriptionId` (where the saved transcript came from), `jobRecordingId` and `jobTranscriptionId` (the running job's, while `processing`) and `transcribedAt`.
   - It is deleted with its file.
 - **Admin routes** (signed with the admin's token): `POST /vocalstack/transcribe/:fileId`, `POST /vocalstack/stop/:fileId`, `GET /vocalstack/status/:fileId`, `GET /vocalstack/files`, and the connection routes below.
 

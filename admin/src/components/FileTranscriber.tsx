@@ -41,6 +41,8 @@ export const FileTranscriber = ({ file, initial, showName }: Props) => {
   const [loaded, setLoaded] = useState(initial !== undefined)
   const [busy, setBusy] = useState(false)
   const [stopping, setStopping] = useState(false)
+  /** Transcribe was clicked and the server has not answered yet: there is no job to stop. */
+  const [starting, setStarting] = useState(false)
   const [progress, setProgress] = useState<Pick<StatusResponse, 'audio'> & { pct?: number; phase?: string }>({})
   const [error, setError] = useState<string>()
   const timer = useRef<ReturnType<typeof setTimeout>>()
@@ -114,6 +116,7 @@ export const FileTranscriber = ({ file, initial, showName }: Props) => {
   const transcribe = async () => {
     setError(undefined)
     setBusy(true)
+    setStarting(true)
     setProgress({})
     try {
       const { data } = await post<StatusResponse>(`/vocalstack/transcribe/${file.id}`)
@@ -123,6 +126,8 @@ export const FileTranscriber = ({ file, initial, showName }: Props) => {
     } catch (err) {
       setBusy(false)
       setError(errorCode(err) === 'not_connected' ? `${errorMessage(err)} (Settings → VocalStack)` : errorMessage(err))
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -169,7 +174,7 @@ export const FileTranscriber = ({ file, initial, showName }: Props) => {
           <Box paddingBottom={2} paddingTop={1}>
             <ProgressBar size="S" value={progress.pct ?? 2} />
           </Box>
-          <Button disabled={stopping} onClick={stop} size="S" variant="tertiary">
+          <Button disabled={stopping || starting} onClick={stop} size="S" variant="tertiary">
             {stopping ? 'Stopping…' : 'Stop'}
           </Button>
         </Box>
