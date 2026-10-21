@@ -96,3 +96,7 @@ tab: "Connected", BroadcastChannel('vocalstack') ─▶ admin refreshes; tab clo
 ```
 
 Strapi's admin signs its requests with a bearer token that a redirect cannot carry, so the callback is a public route: the state, random, single-use and stored server-side by the admin who clicked Connect, is what admits it. `redirect_uri` is `server.url` (or the address the admin used) + `/vocalstack/callback`; set `server.url` when Strapi runs behind a proxy. Cancel redirects with `?error=access_denied&state=…`. The key appears in the dashboard's API keys list as `example.com (Strapi)`, where it can be revoked.
+
+## Issues and support
+
+Found a bug or want a feature? [Open an issue](https://github.com/vocalstack/strapi-plugin/issues) with your Strapi version, the plugin version and what you saw. For questions about your VocalStack account or billing, use [vocalstack.com/contact](https://vocalstack.com/contact/).
