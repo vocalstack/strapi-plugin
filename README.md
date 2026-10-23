@@ -2,6 +2,8 @@
 
 VocalStack for [Strapi](https://strapi.io) 5: a **Transcribe** button on every audio file. The transcript is saved as a Transcript entry: text plus timed sentences.
 
+Read more about the [VocalStack transcription plugin for Strapi](https://vocalstack.com/strapi-transcription-plugin/) on the [VocalStack website](https://vocalstack.com/).
+
 ## Install
 
 ```sh
