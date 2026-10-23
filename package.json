@@ -1,6 +1,6 @@
 {
   "name": "@vocalstack/strapi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "VocalStack for Strapi 5: a Transcribe button on every audio file.",
   "license": "MIT",
   "keywords": [

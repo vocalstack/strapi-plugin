@@ -158,13 +158,18 @@ function isPublicURL(url) {
   const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
   const v4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    return !(a === 10 || a === 127 || a === 0 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 100 && b >= 64 && b <= 127);
+  if (v4) return isPublicIPv4(Number(v4[1]), Number(v4[2]));
+  if (host.includes(":")) {
+    const mapped = host.match(/^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/);
+    if (mapped) {
+      const high = parseInt(mapped[1], 16);
+      return isPublicIPv4(high >> 8, high & 255);
+    }
+    return !(host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80"));
   }
-  if (host.includes(":")) return !(host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80"));
   return true;
 }
+const isPublicIPv4 = (a, b) => !(a === 10 || a === 127 || a === 0 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 100 && b >= 64 && b <= 127);
 async function fetchFile(strapi, file, url) {
   if (file.provider === "local" && file.url?.startsWith("/")) {
     const root = path.resolve(strapi.dirs.static.public);
