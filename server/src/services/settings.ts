@@ -1,7 +1,7 @@
 import type { Core } from '@strapi/strapi'
 
 import { DEFAULT_API_URL, DEFAULT_DASHBOARD_URL } from '../lib/api'
-import { PLUGIN_ID, type VocalStackPluginOptions } from '../lib/types'
+import { PLUGIN_ID, type VocalStackPluginOptions, type Workspace } from '../lib/types'
 
 /**
  * Where a key connected from the admin lives: Strapi's core store, which no REST or
@@ -15,6 +15,8 @@ export type StoredSettings = {
   connectExpiresAt?: null | string
   connectState?: null | string
   connectVerifier?: null | string
+  /** The connected key's workspace, as VocalStack last described it (`iconUrl` relative to the API). */
+  workspace?: null | Workspace
 }
 
 const settings = ({ strapi }: { strapi: Core.Strapi }) => {

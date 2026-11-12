@@ -9,6 +9,8 @@ export declare class RouteError extends Error {
 }
 /** A transcript's sentences, each with its words. */
 export declare function toSentences(t: Pick<Transcript, 'segments' | 'sentences'>): TranscriptSentence[];
+/** A stored job that the connected key cannot see: the connection was changed to another workspace, or it was deleted. */
+export declare const ELSEWHERE = "This transcription is not in the connected VocalStack workspace: it was made in another workspace, or deleted there. Transcribe the file again to make it in this one.";
 /** A VocalStack refusal, as the route answers it. */
 export declare function routeError(err: unknown): RouteError;
 declare const transcriber: ({ strapi }: {
@@ -26,6 +28,12 @@ declare const transcriber: ({ strapi }: {
     stop(fileId: number): Promise<StatusResponse>;
     /** Where a job stands, saving the outcome once it is over: the whole transcript when done, the reason when it failed. */
     checkJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
+    /**
+     * The job is not there for the connected key (the connection moved to another workspace, or
+     * the transcription was deleted): stop following it and say so. An earlier transcript stays.
+     */
+    elsewhere(file: UploadFile): Promise<StatusResponse>;
+    followJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
     /**
      * A stopped job leaves the entry as it was before Transcribe: the earlier transcript, if
      * there was one (a new job only replaces it once done), or none.

@@ -36,6 +36,11 @@ export function toSentences(t: Pick<Transcript, 'segments' | 'sentences'>): Tran
   return attachWords(sentences, (t.segments ?? []).filter((g) => !g.suppressed).flatMap((g) => g.words ?? []))
 }
 
+/** A stored job that the connected key cannot see: the connection was changed to another workspace, or it was deleted. */
+export const ELSEWHERE = 'This transcription is not in the connected VocalStack workspace: it was made in another workspace, or deleted there. Transcribe the file again to make it in this one.'
+
+const notFound = (err: unknown) => err instanceof VocalStackAPIError && err.status === 404
+
 /** A VocalStack refusal, as the route answers it. */
 export function routeError(err: unknown): RouteError {
   if (err instanceof RouteError) return err
@@ -153,12 +158,30 @@ const transcriber = ({ strapi }: { strapi: Core.Strapi }) => {
       } catch (err) {
         // Too late to stop: the job ended meanwhile, so take its outcome instead.
         if (err instanceof VocalStackAPIError && err.status === 409) return self.checkJob(client, file, current, recordingId).catch(() => self.restore(file, current))
+        if (notFound(err)) return self.elsewhere(file)
         throw routeError(err)
       }
     },
 
     /** Where a job stands, saving the outcome once it is over: the whole transcript when done, the reason when it failed. */
     async checkJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse> {
+      try {
+        return await self.followJob(client, file, current, recordingId)
+      } catch (err) {
+        if (notFound(err)) return self.elsewhere(file)
+        throw err
+      }
+    },
+
+    /**
+     * The job is not there for the connected key (the connection moved to another workspace, or
+     * the transcription was deleted): stop following it and say so. An earlier transcript stays.
+     */
+    async elsewhere(file: UploadFile): Promise<StatusResponse> {
+      return { error: ELSEWHERE, status: 'failed', transcript: await self.save(file, { error: ELSEWHERE, jobRecordingId: null, jobTranscriptionId: null, status: 'failed' }) }
+    },
+
+    async followJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse> {
       const job = await client.job(recordingId)
       if (job.state === 'stopped' || (job.state === 'failed' && job.errorCode === 'stopped')) return self.restore(file, current)
       if (job.state === 'failed' || job.state === 'cropping') {

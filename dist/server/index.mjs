@@ -183,6 +183,49 @@ async function fetchFile(strapi, file, url) {
   if (!res.ok) throw new Error(`Could not read the file (${res.status} from ${url})`);
   return res.blob();
 }
+function workspaceOf(answer) {
+  const w = answer?.workspace;
+  if (!w || typeof w !== "object" || typeof w.id !== "string" || !w.id || typeof w.name !== "string" || !w.name.trim()) return void 0;
+  return { id: w.id, name: w.name.trim(), personal: w.personal === true, iconUrl: typeof w.iconUrl === "string" && w.iconUrl ? w.iconUrl : null };
+}
+function iconLink(apiURL, iconUrl) {
+  if (!iconUrl) return void 0;
+  try {
+    const api = new URL(apiURL);
+    const url = new URL(iconUrl, api);
+    return url.origin === api.origin ? url.toString() : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function iconVersion(link) {
+  const url = new URL(link);
+  return `${url.origin}${url.pathname}?v=${url.searchParams.get("v") ?? ""}`;
+}
+const ICON_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const ICON_MAX_BYTES = 1024 * 1024;
+const ICON_CACHE_MAX = 20;
+const icons = /* @__PURE__ */ new Map();
+async function workspaceIcon(apiURL, iconUrl, load = true, fetcher = fetch) {
+  const link = iconLink(apiURL, iconUrl);
+  if (!link) return null;
+  const version = iconVersion(link);
+  const known = icons.get(version);
+  if (known || !load) return known ?? null;
+  try {
+    const res = await fetcher(link, { headers: { accept: "image/*" }, signal: AbortSignal.timeout(8e3) });
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (!res.ok || !ICON_TYPES.includes(type)) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (!bytes.length || bytes.length > ICON_MAX_BYTES) return null;
+    const data = `data:${type};base64,${bytes.toString("base64")}`;
+    if (icons.size >= ICON_CACHE_MAX) icons.delete(icons.keys().next().value);
+    icons.set(version, data);
+    return data;
+  } catch {
+    return null;
+  }
+}
 const breaksParagraph = (s, prev) => !prev || s.speaker !== prev.speaker || s.start - prev.end > 2.5;
 function paragraphs(sentences) {
   const out = [];
@@ -223,6 +266,8 @@ function toSentences(t) {
   const sentences = t.sentences.filter((s) => !s.suppressed && s.text.trim()).map(({ end, sentenceId, speaker, start, text }) => ({ id: sentenceId, end, speaker, start, text: text.trim() }));
   return attachWords(sentences, (t.segments ?? []).filter((g) => !g.suppressed).flatMap((g) => g.words ?? []));
 }
+const ELSEWHERE = "This transcription is not in the connected VocalStack workspace: it was made in another workspace, or deleted there. Transcribe the file again to make it in this one.";
+const notFound = (err) => err instanceof VocalStackAPIError && err.status === 404;
 function routeError(err) {
   if (err instanceof RouteError) return err;
   if (err instanceof VocalStackAPIError) {
@@ -312,11 +357,27 @@ const transcriber = ({ strapi }) => {
         return await self.restore(file, current);
       } catch (err) {
         if (err instanceof VocalStackAPIError && err.status === 409) return self.checkJob(client, file, current, recordingId).catch(() => self.restore(file, current));
+        if (notFound(err)) return self.elsewhere(file);
         throw routeError(err);
       }
     },
     /** Where a job stands, saving the outcome once it is over: the whole transcript when done, the reason when it failed. */
     async checkJob(client, file, current, recordingId) {
+      try {
+        return await self.followJob(client, file, current, recordingId);
+      } catch (err) {
+        if (notFound(err)) return self.elsewhere(file);
+        throw err;
+      }
+    },
+    /**
+     * The job is not there for the connected key (the connection moved to another workspace, or
+     * the transcription was deleted): stop following it and say so. An earlier transcript stays.
+     */
+    async elsewhere(file) {
+      return { error: ELSEWHERE, status: "failed", transcript: await self.save(file, { error: ELSEWHERE, jobRecordingId: null, jobTranscriptionId: null, status: "failed" }) };
+    },
+    async followJob(client, file, current, recordingId) {
       const job = await client.job(recordingId);
       if (job.state === "stopped" || job.state === "failed" && job.errorCode === "stopped") return self.restore(file, current);
       if (job.state === "failed" || job.state === "cropping") {
@@ -421,32 +482,49 @@ const controller = ({ strapi }) => {
     if (!Number.isInteger(id) || id <= 0) throw new RouteError(400, "fileId is a Media Library file id.");
     return id;
   };
-  const connection = async () => {
+  let configKey;
+  const connection = async ({ check = false, icon = check } = {}) => {
     const options2 = settings2().options();
     const common = { enabled: options2.enabled !== false, oneClickConnect: Boolean(options2.oneClickConnect) };
-    if (options2.apiKey) return { ...common, connected: true, source: "options" };
-    const stored = await settings2().read();
-    return { ...common, account: stored.account ?? void 0, connected: Boolean(stored.apiKey), source: stored.apiKey ? "admin" : void 0 };
+    const stored = options2.apiKey ? void 0 : await settings2().read();
+    const apiKey = options2.apiKey || stored?.apiKey;
+    if (!apiKey) return { ...common, account: stored?.account ?? void 0, connected: false, source: void 0 };
+    let known = stored ?? (configKey?.apiKey === apiKey ? configKey : {});
+    if (check && common.enabled) {
+      const me = await new VocalStackAPI(apiKey, options2.apiURL).me().catch(() => void 0);
+      if (me) {
+        const workspace2 = workspaceOf(me) ?? null;
+        const seen = { account: workspace2?.name ?? known.account ?? (stored ? accountLabel(me) : void 0) ?? null, workspace: workspace2 };
+        if (!stored) configKey = { ...seen, apiKey };
+        else if (JSON.stringify([seen.account, seen.workspace]) !== JSON.stringify([stored.account ?? null, stored.workspace ?? null])) {
+          if ((await settings2().read()).apiKey === apiKey) await settings2().write(seen);
+        }
+        known = seen;
+      }
+    }
+    const workspace = known.workspace ? { ...known.workspace, iconUrl: await workspaceIcon(options2.apiURL, known.workspace.iconUrl, icon) } : void 0;
+    return { ...common, account: workspace?.name ?? known.account ?? void 0, connected: true, source: stored ? "admin" : "options", workspace };
   };
   return {
     // Answers even when turned off, so the admin can say so.
     async connection(ctx) {
-      ctx.body = await connection();
+      ctx.body = await connection({ check: ctx.query.check === "1" });
     },
     /** Paste a key (the fallback, and the way to connect until the dashboard ships /connect). */
     saveKey: route(async (ctx) => {
       const apiKey = ctx.request.body?.apiKey?.trim();
       if (!apiKey?.startsWith("vs_key_")) throw new RouteError(400, "A VocalStack API key starts with vs_key_.");
       try {
-        const account = accountLabel(await new VocalStackAPI(apiKey, settings2().options().apiURL).me()) ?? null;
-        await settings2().write({ account, apiKey });
+        const me = await new VocalStackAPI(apiKey, settings2().options().apiURL).me();
+        const workspace = workspaceOf(me) ?? null;
+        await settings2().write({ account: workspace?.name ?? accountLabel(me) ?? null, apiKey, workspace });
       } catch (err) {
         throw new RouteError(400, err instanceof VocalStackAPIError && err.status === 401 ? "VocalStack refused that key." : String(err.message));
       }
-      ctx.body = await connection();
+      ctx.body = await connection({ icon: true });
     }),
     deleteKey: route(async (ctx) => {
-      await settings2().write({ account: null, apiKey: null });
+      await settings2().write({ account: null, apiKey: null, workspace: null });
       ctx.body = await connection();
     }),
     /**
@@ -455,10 +533,14 @@ const controller = ({ strapi }) => {
      *
      * 1. POST /vocalstack/connect   → state + verifier stored here; the admin opens
      *    {dashboard}/connect?response_type=code&redirect_uri=…&state=…&code_challenge=…
-     * 2. The person clicks Authenticate on the dashboard, which redirects to
-     *    /vocalstack/callback?code=…&state=…
+     * 2. The person picks a workspace and clicks Authenticate on the dashboard, which
+     *    redirects to /vocalstack/callback?code=…&state=…
      * 3. The callback redeems the code server-to-server at {api}/v1/connect/token with
      *    the verifier and stores the key it answers. The key never passes through a browser.
+     *
+     * Changing the workspace is the same flow again: a key belongs to one workspace, so the
+     * new workspace comes with a new key. The key in use is replaced only in step 3, once the
+     * new one is in hand; a cancelled or failed connect leaves it as it was.
      */
     connect: route(async (ctx) => {
       const options2 = settings2().options();
@@ -515,9 +597,11 @@ const controller = ({ strapi }) => {
       }).catch(() => void 0);
       const token = await res?.json().catch(() => ({})) ?? {};
       if (!res?.ok || !token.access_token) return page(`VocalStack did not issue a key: ${token.error_description ?? res?.status ?? "no answer"}`, false);
-      const account = token.account?.name ?? accountLabel(await new VocalStackAPI(token.access_token, options2.apiURL).me().catch(() => ({}))) ?? null;
-      await settings2().write({ account, apiKey: token.access_token });
-      page(account ? `Connected to VocalStack as ${account}.` : "Connected to VocalStack.", true);
+      const me = workspaceOf(token) ? {} : await new VocalStackAPI(token.access_token, options2.apiURL).me().catch(() => ({}));
+      const workspace = workspaceOf(token) ?? workspaceOf(me) ?? null;
+      const account = workspace?.name ?? token.account?.name ?? accountLabel(me) ?? null;
+      await settings2().write({ account, apiKey: token.access_token, workspace });
+      page(workspace ? `Connected to the VocalStack workspace ${workspace.name}.` : account ? `Connected to VocalStack as ${account}.` : "Connected to VocalStack.", true);
     },
     transcribe: route(async (ctx) => {
       const result = await transcriber2().start(fileId(ctx), ctx.request.origin);

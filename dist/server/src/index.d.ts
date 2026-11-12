@@ -309,6 +309,8 @@ declare const _default: {
             status(fileId: number): Promise<import('./lib/types').StatusResponse>;
             stop(fileId: number): Promise<import('./lib/types').StatusResponse>;
             checkJob(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData, recordingId: string): Promise<import('./lib/types').StatusResponse>;
+            elsewhere(file: import('./lib/types').UploadFile): Promise<import('./lib/types').StatusResponse>;
+            followJob(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData, recordingId: string): Promise<import('./lib/types').StatusResponse>;
             restore(file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData): Promise<import('./lib/types').StatusResponse>;
             saveTranscript(client: import('./lib/api').VocalStackAPI, file: import('./lib/types').UploadFile, current: import('./lib/types').TranscriptData, recordingId: string): Promise<import('./lib/types').StatusResponse>;
             many(fileIds: number[]): Promise<Record<number, import('./lib/types').TranscriptData>>;

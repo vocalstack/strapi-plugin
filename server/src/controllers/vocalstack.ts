@@ -7,7 +7,8 @@ import type { TranscriberService } from '../services/transcriber'
 
 import { accountLabel, VocalStackAPI, VocalStackAPIError } from '../lib/api'
 import { serverBase } from '../lib/fileSource'
-import { type ConnectionResponse, FILE_UID, PLUGIN_ID, type UploadFile } from '../lib/types'
+import { type ConnectionResponse, FILE_UID, PLUGIN_ID, type UploadFile, type Workspace } from '../lib/types'
+import { workspaceIcon, workspaceOf } from '../lib/workspace'
 import { RouteError } from '../services/transcriber'
 
 /** The slice of Koa's context the routes use. */
@@ -55,18 +56,43 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
     return id
   }
 
-  const connection = async (): Promise<ConnectionResponse> => {
+  /** What VocalStack last said about the key in the plugin config (a connected key's is in the store). */
+  let configKey: { account?: null | string; apiKey: string; workspace?: null | Workspace } | undefined
+
+  /**
+   * The connection, with the key's workspace. `check` asks VocalStack again (`GET /v1/me`), so a
+   * new name or icon made in the dashboard shows here, and a pasted or configured key shows its
+   * workspace too; without it the answer is what was last seen. `icon` fetches the icon if needed.
+   */
+  const connection = async ({ check = false, icon = check }: { check?: boolean; icon?: boolean } = {}): Promise<ConnectionResponse> => {
     const options = settings().options()
     const common = { enabled: options.enabled !== false, oneClickConnect: Boolean(options.oneClickConnect) }
-    if (options.apiKey) return { ...common, connected: true, source: 'options' }
-    const stored = await settings().read()
-    return { ...common, account: stored.account ?? undefined, connected: Boolean(stored.apiKey), source: stored.apiKey ? 'admin' : undefined }
+    const stored = options.apiKey ? undefined : await settings().read()
+    const apiKey = options.apiKey || stored?.apiKey
+    if (!apiKey) return { ...common, account: stored?.account ?? undefined, connected: false, source: undefined }
+
+    let known: { account?: null | string; workspace?: null | Workspace } = stored ?? (configKey?.apiKey === apiKey ? configKey : {})
+    if (check && common.enabled) {
+      const me = await new VocalStackAPI(apiKey, options.apiURL).me().catch(() => undefined)
+      if (me) {
+        const workspace = workspaceOf(me) ?? null
+        const seen = { account: workspace?.name ?? known.account ?? (stored ? accountLabel(me) : undefined) ?? null, workspace }
+        if (!stored) configKey = { ...seen, apiKey }
+        else if (JSON.stringify([seen.account, seen.workspace]) !== JSON.stringify([stored.account ?? null, stored.workspace ?? null])) {
+          // Only for the key that was asked about: a connect may have replaced it meanwhile.
+          if ((await settings().read()).apiKey === apiKey) await settings().write(seen)
+        }
+        known = seen
+      }
+    }
+    const workspace = known.workspace ? { ...known.workspace, iconUrl: await workspaceIcon(options.apiURL, known.workspace.iconUrl, icon) } : undefined
+    return { ...common, account: workspace?.name ?? known.account ?? undefined, connected: true, source: stored ? 'admin' : 'options', workspace }
   }
 
   return {
     // Answers even when turned off, so the admin can say so.
     async connection(ctx: Ctx) {
-      ctx.body = await connection()
+      ctx.body = await connection({ check: ctx.query.check === '1' })
     },
 
     /** Paste a key (the fallback, and the way to connect until the dashboard ships /connect). */
@@ -74,16 +100,17 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
       const apiKey = (ctx.request.body as { apiKey?: string } | undefined)?.apiKey?.trim()
       if (!apiKey?.startsWith('vs_key_')) throw new RouteError(400, 'A VocalStack API key starts with vs_key_.')
       try {
-        const account = accountLabel(await new VocalStackAPI(apiKey, settings().options().apiURL).me()) ?? null
-        await settings().write({ account, apiKey })
+        const me = await new VocalStackAPI(apiKey, settings().options().apiURL).me()
+        const workspace = workspaceOf(me) ?? null
+        await settings().write({ account: workspace?.name ?? accountLabel(me) ?? null, apiKey, workspace })
       } catch (err) {
         throw new RouteError(400, err instanceof VocalStackAPIError && err.status === 401 ? 'VocalStack refused that key.' : String((err as Error).message))
       }
-      ctx.body = await connection()
+      ctx.body = await connection({ icon: true })
     }),
 
     deleteKey: route(async (ctx) => {
-      await settings().write({ account: null, apiKey: null })
+      await settings().write({ account: null, apiKey: null, workspace: null })
       ctx.body = await connection()
     }),
 
@@ -93,10 +120,14 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
      *
      * 1. POST /vocalstack/connect   → state + verifier stored here; the admin opens
      *    {dashboard}/connect?response_type=code&redirect_uri=…&state=…&code_challenge=…
-     * 2. The person clicks Authenticate on the dashboard, which redirects to
-     *    /vocalstack/callback?code=…&state=…
+     * 2. The person picks a workspace and clicks Authenticate on the dashboard, which
+     *    redirects to /vocalstack/callback?code=…&state=…
      * 3. The callback redeems the code server-to-server at {api}/v1/connect/token with
      *    the verifier and stores the key it answers. The key never passes through a browser.
+     *
+     * Changing the workspace is the same flow again: a key belongs to one workspace, so the
+     * new workspace comes with a new key. The key in use is replaced only in step 3, once the
+     * new one is in hand; a cancelled or failed connect leaves it as it was.
      */
     connect: route(async (ctx) => {
       const options = settings().options()
@@ -156,12 +187,15 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
         headers: { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
         method: 'POST',
       }).catch(() => undefined)
-      const token = ((await res?.json().catch(() => ({}))) ?? {}) as { access_token?: string; account?: { name?: string }; error_description?: string }
+      const token = ((await res?.json().catch(() => ({}))) ?? {}) as { access_token?: string; account?: { name?: string }; error_description?: string; workspace?: unknown }
       if (!res?.ok || !token.access_token) return page(`VocalStack did not issue a key: ${token.error_description ?? res?.status ?? 'no answer'}`, false)
 
-      const account = token.account?.name ?? accountLabel(await new VocalStackAPI(token.access_token, options.apiURL).me().catch(() => ({}))) ?? null
-      await settings().write({ account, apiKey: token.access_token })
-      page(account ? `Connected to VocalStack as ${account}.` : 'Connected to VocalStack.', true)
+      // An older API names no workspace on the token; ask /v1/me, then fall back to the account's name.
+      const me = workspaceOf(token) ? {} : await new VocalStackAPI(token.access_token, options.apiURL).me().catch(() => ({}))
+      const workspace = workspaceOf(token) ?? workspaceOf(me) ?? null
+      const account = workspace?.name ?? token.account?.name ?? accountLabel(me) ?? null
+      await settings().write({ account, apiKey: token.access_token, workspace })
+      page(workspace ? `Connected to the VocalStack workspace ${workspace.name}.` : account ? `Connected to VocalStack as ${account}.` : 'Connected to VocalStack.', true)
     },
 
     transcribe: route(async (ctx) => {

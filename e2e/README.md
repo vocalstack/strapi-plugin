@@ -6,7 +6,7 @@
 
 | Step (`STEPS`) | |
 |---|---|
-| `settings` | Settings → VocalStack: a wrong key is refused, a pasted `VS_API_KEY` connects. Skipped when the key comes from `config/plugins` (the page then only says so). |
+| `settings` | Settings → VocalStack: a wrong key is refused, a pasted `VS_API_KEY` connects, and the key's workspace is reported when VocalStack names one. Skipped when the key comes from `config/plugins` (the page then only says so). |
 | `transcribe` | Uploads `AUDIO_FILE` (a fresh copy under a unique name) through the Media Library, creates an Episode with it, clicks **Transcribe** in the VocalStack panel, sees progress, reloads mid-job and sees the job picked back up, waits for done, checks the transcript reads as English, and reads it over REST with `STRAPI_API_TOKEN`. |
 | `stop` | **Transcribe again**, then **Stop**: the entry goes back to the first transcript and stays there. Needs `transcribe` in the same run. |
 | `auto` | With `autoTranscribe: true`, a second upload gets a transcript with no click (saved by the server's poller, with no admin page open). |

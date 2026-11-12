@@ -1,6 +1,6 @@
 {
   "name": "@vocalstack/strapi",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "VocalStack for Strapi 5: a Transcribe button on every audio file.",
   "license": "MIT",
   "keywords": [
@@ -36,7 +36,8 @@
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link",
     "verify": "strapi-plugin verify",
-    "typecheck": "tsc -p admin/tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit"
+    "typecheck": "tsc -p admin/tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"test/*.test.mjs\""
   },
   "peerDependencies": {
     "@strapi/design-system": "^2.0.0",

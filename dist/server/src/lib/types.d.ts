@@ -91,7 +91,19 @@ export type StatusResponse = {
     stopped?: boolean;
     transcript?: TranscriptData;
 };
+/**
+ * The VocalStack workspace a key belongs to: everything the key creates lands there and is
+ * billed there. From the API, `iconUrl` is a link relative to the API's address; in the
+ * connection route's answer it is a `data:` URL the admin can show as it is. Null: no icon.
+ */
+export type Workspace = {
+    iconUrl: null | string;
+    id: string;
+    name: string;
+    personal: boolean;
+};
 export type ConnectionResponse = {
+    /** The workspace's name when VocalStack names one; else the label the connection was saved with. */
     account?: string;
     /** The panel and routes are on (the `enabled` option). */
     enabled: boolean;
@@ -99,4 +111,6 @@ export type ConnectionResponse = {
     oneClickConnect: boolean;
     /** `options`: the key is in the plugin config; `admin`: connected from the admin panel. */
     source?: 'admin' | 'options';
+    /** The workspace the key works in. Left out when not connected, or when the API does not say. */
+    workspace?: Workspace;
 };

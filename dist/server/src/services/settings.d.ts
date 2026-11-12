@@ -1,5 +1,5 @@
 import { Core } from '@strapi/strapi';
-import { VocalStackPluginOptions } from '../lib/types';
+import { VocalStackPluginOptions, Workspace } from '../lib/types';
 /**
  * Where a key connected from the admin lives: Strapi's core store, which no REST or
  * GraphQL route reads. Only the plugin's routes touch it, so the key never reaches a browser.
@@ -12,6 +12,8 @@ export type StoredSettings = {
     connectExpiresAt?: null | string;
     connectState?: null | string;
     connectVerifier?: null | string;
+    /** The connected key's workspace, as VocalStack last described it (`iconUrl` relative to the API). */
+    workspace?: null | Workspace;
 };
 declare const settings: ({ strapi }: {
     strapi: Core.Strapi;

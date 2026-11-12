@@ -30,10 +30,14 @@ declare const controller: ({ strapi }: {
      *
      * 1. POST /vocalstack/connect   → state + verifier stored here; the admin opens
      *    {dashboard}/connect?response_type=code&redirect_uri=…&state=…&code_challenge=…
-     * 2. The person clicks Authenticate on the dashboard, which redirects to
-     *    /vocalstack/callback?code=…&state=…
+     * 2. The person picks a workspace and clicks Authenticate on the dashboard, which
+     *    redirects to /vocalstack/callback?code=…&state=…
      * 3. The callback redeems the code server-to-server at {api}/v1/connect/token with
      *    the verifier and stores the key it answers. The key never passes through a browser.
+     *
+     * Changing the workspace is the same flow again: a key belongs to one workspace, so the
+     * new workspace comes with a new key. The key in use is replaced only in step 3, once the
+     * new one is in hand; a cancelled or failed connect leaves it as it was.
      */
     connect: (ctx: Ctx) => Promise<void>;
     /**

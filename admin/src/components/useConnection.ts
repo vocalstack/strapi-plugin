@@ -16,19 +16,23 @@ export function errorCode(err: unknown): string | undefined {
   return (err as { response?: { data?: { code?: string } } })?.response?.data?.code
 }
 
-/** The VocalStack connection, and the one-click flow that opens the dashboard in a new tab. */
-export function useConnection() {
+/**
+ * The VocalStack connection, and the one-click flow that opens the dashboard in a new tab.
+ * `check` asks VocalStack about the key's workspace each time (its name and icon may have
+ * changed in the dashboard); without it the answer is what the server last saw.
+ */
+export function useConnection({ check = false }: { check?: boolean } = {}) {
   const { get, post } = useFetchClient()
   const [connection, setConnection] = useState<ConnectionResponse>()
   const [connecting, setConnecting] = useState(false)
 
   const refresh = useCallback(
     () =>
-      get<ConnectionResponse>('/vocalstack/connection').then(
+      get<ConnectionResponse>(check ? '/vocalstack/connection?check=1' : '/vocalstack/connection').then(
         (res) => setConnection(res.data),
         () => setConnection({ connected: false, enabled: false, oneClickConnect: false }),
       ),
-    [get],
+    [check, get],
   )
 
   useEffect(() => {

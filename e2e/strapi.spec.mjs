@@ -199,8 +199,11 @@ async function main() {
         await page.getByRole('button', { name: /save key/i }).click()
         await page.getByText(/Connected to VocalStack/).first().waitFor({ timeout: 20000 })
         await connected.waitFor()
+        // The key's workspace, when this VocalStack names one (an older API does not).
+        const workspace = page.getByTestId('vocalstack-workspace-name')
+        const named = await workspace.waitFor({ timeout: 5000 }).then(() => true, () => false)
         await shot(page, 'settings-connected')
-        return (await page.getByText(/Entries with audio now have/).textContent()).trim()
+        return `${(await page.getByText(/Entries with audio now have/).textContent()).trim()}${named ? ` Workspace: ${(await workspace.textContent()).trim()}.` : ' No workspace shown.'}`
       })
     }
 

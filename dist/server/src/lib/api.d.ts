@@ -75,5 +75,5 @@ export declare class VocalStackAPI {
     stop(recordingId: string, reason?: string): Promise<unknown>;
     transcript(recordingId: string): Promise<Transcript>;
 }
-/** A short label for the connected account, from whatever `/v1/me` carries. */
+/** A short label for the connected account, from whatever `/v1/me` carries (used when it names no workspace). */
 export declare function accountLabel(me: Record<string, unknown>): string | undefined;

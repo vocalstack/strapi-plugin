@@ -1,20 +1,45 @@
 import { Box, Button, Field, Flex, Link, Table, Tbody, Td, Th, Thead, TextInput, Tr, Typography } from '@strapi/design-system'
 import { Layouts, Page, useFetchClient, useNotification, useRBAC } from '@strapi/strapi/admin'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AudioFile, ConnectionResponse, TranscriptData } from '../types'
+import type { AudioFile, ConnectionResponse, TranscriptData, Workspace } from '../types'
 
 import { Logo } from '../components/Brand'
 import { FileTranscriber } from '../components/FileTranscriber'
 import { errorMessage, useConnection } from '../components/useConnection'
+import { WorkspaceMark } from '../components/WorkspaceMark'
 import { PERMISSIONS } from '../pluginId'
 
 const KEYS_URL = 'https://app.vocalstack.com/developers/keys'
 
+/**
+ * The workspace the connected key works in. A key belongs to one workspace, so Change runs
+ * One-click Connect again: the person picks a workspace on VocalStack's consent screen and
+ * the plugin gets a new key for it.
+ */
+const WorkspaceRow = ({ changing, onChange, workspace }: { changing?: boolean; onChange?: () => void; workspace: Workspace }) => (
+  <Flex alignItems="center" data-testid="vocalstack-workspace" gap={3}>
+    <WorkspaceMark size={40} workspace={workspace} />
+    <Flex alignItems="flex-start" direction="column" flex="1" gap={1} style={{ minWidth: 0 }}>
+      <Typography textColor="neutral600" variant="sigma">
+        Workspace
+      </Typography>
+      <Typography data-testid="vocalstack-workspace-name" ellipsis fontWeight="semiBold" textColor="neutral800">
+        {workspace.name}
+      </Typography>
+    </Flex>
+    {onChange && (
+      <Button aria-label={changing ? 'Waiting for VocalStack' : 'Change workspace'} data-testid="vocalstack-workspace-change" disabled={changing} onClick={onChange} variant="tertiary">
+        {changing ? 'Waiting for VocalStack…' : 'Change'}
+      </Button>
+    )}
+  </Flex>
+)
+
 const Connection = () => {
   const { post, del } = useFetchClient()
   const { toggleNotification } = useNotification()
-  const { connect, connecting, connection, setConnection } = useConnection()
+  const { connect, connecting, connection, setConnection } = useConnection({ check: true })
   const [apiKey, setAPIKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
@@ -35,17 +60,48 @@ const Connection = () => {
 
   const save = () => void run(() => post<ConnectionResponse>('/vocalstack/key', { apiKey }), 'Connected to VocalStack.')
 
+  // The workspace changed while this page was open: Change, or a connect in another tab.
+  const workspace = connection?.workspace
+  const shown = useRef<string>()
+  useEffect(() => {
+    if (shown.current && workspace && shown.current !== workspace.id) toggleNotification({ message: `VocalStack now works in the workspace ${workspace.name}.`, type: 'success' })
+    shown.current = workspace?.id
+  }, [toggleNotification, workspace])
+
   if (!connection) return <Typography textColor="neutral600">Checking the VocalStack connection…</Typography>
   if (!connection.enabled) return <Typography textColor="neutral600">VocalStack is turned off in this Strapi (`enabled: false` in config/plugins).</Typography>
-  if (connection.source === 'options') return <Typography textColor="neutral600">Connected with the API key from the plugin config. Change it there.</Typography>
+  if (connection.source === 'options') {
+    if (!workspace) return <Typography textColor="neutral600">Connected with the API key from the plugin config. Change it there.</Typography>
+    return (
+      <Flex alignItems="stretch" direction="column" gap={4} maxWidth="560px">
+        <WorkspaceRow workspace={workspace} />
+        <Typography textColor="neutral600">
+          Connected with the API key from the plugin config. Change it there: to work in another workspace, set <code>apiKey</code> in config/plugins to a key made in that workspace.
+        </Typography>
+      </Flex>
+    )
+  }
 
   return (
     <Flex alignItems="stretch" direction="column" gap={4} maxWidth="560px">
       {connection.connected ? (
         <>
+          {workspace && <WorkspaceRow changing={connecting} onChange={connection.oneClickConnect ? () => connect().catch((e: Error) => setError(e.message)) : undefined} workspace={workspace} />}
           <Typography>
-            Connected to VocalStack{connection.account ? ` as ${connection.account}` : ''}. Entries with audio now have a VocalStack panel with a Transcribe button.
+            Connected to VocalStack{!workspace && connection.account ? ` as ${connection.account}` : ''}. Entries with audio now have a VocalStack panel with a Transcribe button.
           </Typography>
+          {workspace && (
+            <Typography textColor="neutral600" variant="pi">
+              Transcriptions are made in this workspace and use its credit.{' '}
+              {connection.oneClickConnect
+                ? 'Change opens VocalStack in a new tab: pick another workspace there and click Authenticate. Connecting again makes a new key; the old one keeps working until it is revoked in VocalStack under '
+                : 'A key belongs to one workspace: to work in another, disconnect and paste a key made in that workspace. The old key keeps working until it is revoked in VocalStack under '}
+              <Link href={KEYS_URL} isExternal>
+                Developers → API keys
+              </Link>
+              . Transcripts already saved here stay.
+            </Typography>
+          )}
           <Box>
             <Button disabled={saving} onClick={() => run(() => del<ConnectionResponse>('/vocalstack/key'), 'Disconnected.')} variant="secondary">
               Disconnect

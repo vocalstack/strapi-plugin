@@ -105,7 +105,7 @@ export class VocalStackAPI {
   }
 }
 
-/** A short label for the connected account, from whatever `/v1/me` carries. */
+/** A short label for the connected account, from whatever `/v1/me` carries (used when it names no workspace). */
 export function accountLabel(me: Record<string, unknown>): string | undefined {
   const pick = (o: unknown, ...keys: string[]): string | undefined => {
     if (!o || typeof o !== 'object') return undefined
