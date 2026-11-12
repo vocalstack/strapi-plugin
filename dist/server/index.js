@@ -509,6 +509,12 @@ const controller = ({ strapi: strapi2 }) => {
     const workspace = known.workspace ? { ...known.workspace, iconUrl: await workspaceIcon(options2.apiURL, known.workspace.iconUrl, icon) } : void 0;
     return { ...common, account: workspace?.name ?? known.account ?? void 0, connected: true, source: stored ? "admin" : "options", workspace };
   };
+  const connectedWorkspaceId = async () => {
+    const configured = settings2().options().apiKey;
+    const known = configured ? configKey?.apiKey === configured ? configKey : void 0 : await settings2().read();
+    const id = known?.apiKey ? known.workspace?.id : void 0;
+    return typeof id === "string" && id ? id : void 0;
+  };
   return {
     // Answers even when turned off, so the admin can say so.
     async connection(ctx) {
@@ -559,7 +565,7 @@ const controller = ({ strapi: strapi2 }) => {
       });
       const site = new URL(serverBase(strapi2, ctx.request.origin));
       const url = new URL("/connect", options2.dashboardURL);
-      url.search = new URLSearchParams({
+      const params = new URLSearchParams({
         client_name: `${site.host} (Strapi)`,
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -567,7 +573,10 @@ const controller = ({ strapi: strapi2 }) => {
         response_type: "code",
         scope: "read write",
         state
-      }).toString();
+      });
+      const current = await connectedWorkspaceId().catch(() => void 0);
+      if (current) params.set("workspace", current);
+      url.search = params.toString();
       ctx.body = { url: url.toString() };
     }),
     /**

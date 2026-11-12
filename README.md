@@ -84,7 +84,7 @@ GET /api/vocalstack/transcripts?filters[fileId][$eq]=12&fields[0]=transcript&fie
 
 ## One-click connect (protocol)
 
-The alternative to pasting a key: **Connect VocalStack** opens the dashboard in a new tab, the person picks a workspace and clicks **Authenticate**, and the tab closes. **Change** beside the connected workspace runs the same flow again and swaps the stored key for the new one only once VocalStack has issued it. This is OAuth 2.0 authorization code + PKCE (RFC 7636) with an API key as the access token. There is no client registration: the consent screen shows the `redirect_uri` host instead.
+The alternative to pasting a key: **Connect VocalStack** opens the dashboard in a new tab, the person picks a workspace and clicks **Authenticate**, and the tab closes. **Change** beside the connected workspace runs the same flow again and swaps the stored key for the new one only once VocalStack has issued it; the link then carries `workspace=<id of the connected workspace>`, so the consent screen starts on it. This is OAuth 2.0 authorization code + PKCE (RFC 7636) with an API key as the access token. There is no client registration: the consent screen shows the `redirect_uri` host instead.
 
 ```
 Strapi admin                        Strapi server                      app.vocalstack.com / api.vocalstack.com

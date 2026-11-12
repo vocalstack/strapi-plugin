@@ -157,6 +157,38 @@ async function started(controller) {
   return new URL(c.body.url).searchParams.get('state');
 }
 
+test('a connect started while connected opens the consent screen on that workspace; otherwise no workspace is named', async () => {
+  const calls = vocalstack({});
+  const link = async (config, stored) => {
+    const c = ctx();
+    await strapiWith({ oneClickConnect: true, ...config }, stored).controller.connect(c);
+    return new URL(c.body.url);
+  };
+
+  const connected = await link({}, { account: 'Acme studio', apiKey: 'vs_key_old', workspace: ACME });
+  assert.equal(connected.pathname, '/connect');
+  assert.equal(connected.searchParams.get('workspace'), ACME.id);
+  assert.equal(connected.searchParams.get('response_type'), 'code');
+  assert.ok(connected.searchParams.get('state'));
+
+  assert.equal((await link({}, {})).searchParams.has('workspace'), false);
+  assert.equal((await link({}, { account: 'my key', apiKey: 'vs_key_old' })).searchParams.has('workspace'), false);
+  assert.equal((await link({}, { apiKey: 'vs_key_old', workspace: null })).searchParams.has('workspace'), false);
+  // A workspace left in the store without its key, or belonging to a stored key the config key overrides, is not the one in use.
+  assert.equal((await link({}, { apiKey: null, workspace: ACME })).searchParams.has('workspace'), false);
+  assert.equal((await link({ apiKey: 'vs_key_config' }, { apiKey: 'vs_key_stored', workspace: ACME })).searchParams.has('workspace'), false);
+  assert.equal(calls.length, 0);
+});
+
+test('a key from the plugin config names its workspace on the connect link once it has been seen', async () => {
+  vocalstack({ 'GET /v1/me': () => ({ body: { workspace: PERSONAL } }) });
+  const { controller } = strapiWith({ apiKey: 'vs_key_config', oneClickConnect: true });
+  await controller.connection(ctx({ query: { check: '1' } }));
+  const c = ctx();
+  await controller.connect(c);
+  assert.equal(new URL(c.body.url).searchParams.get('workspace'), PERSONAL.id);
+});
+
 test('changing the workspace: the new key replaces the old one only once it is issued', async () => {
   const calls = vocalstack({ 'POST /v1/connect/token': () => ({ body: { access_token: 'vs_key_new', account: { name: 'Raul' }, token_type: 'api_key', workspace: ACME } }) });
   const { controller, state } = strapiWith({ oneClickConnect: true }, { account: 'Personal workspace', apiKey: 'vs_key_old', workspace: PERSONAL });

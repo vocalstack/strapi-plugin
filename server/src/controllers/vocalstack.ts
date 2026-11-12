@@ -89,6 +89,14 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
     return { ...common, account: workspace?.name ?? known.account ?? undefined, connected: true, source: stored ? 'admin' : 'options', workspace }
   }
 
+  /** The id of the workspace the key in use belongs to, when it was seen before. */
+  const connectedWorkspaceId = async (): Promise<string | undefined> => {
+    const configured = settings().options().apiKey
+    const known = configured ? (configKey?.apiKey === configured ? configKey : undefined) : await settings().read()
+    const id = known?.apiKey ? known.workspace?.id : undefined
+    return typeof id === 'string' && id ? id : undefined
+  }
+
   return {
     // Answers even when turned off, so the admin can say so.
     async connection(ctx: Ctx) {
@@ -143,7 +151,7 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
 
       const site = new URL(serverBase(strapi, ctx.request.origin))
       const url = new URL('/connect', options.dashboardURL)
-      url.search = new URLSearchParams({
+      const params = new URLSearchParams({
         client_name: `${site.host} (Strapi)`,
         code_challenge: challenge,
         code_challenge_method: 'S256',
@@ -151,7 +159,11 @@ const controller = ({ strapi }: { strapi: Core.Strapi }) => {
         response_type: 'code',
         scope: 'read write',
         state,
-      }).toString()
+      })
+      // The consent screen starts on the workspace in use. Only what is already known here: nothing is asked of VocalStack.
+      const current = await connectedWorkspaceId().catch(() => undefined)
+      if (current) params.set('workspace', current)
+      url.search = params.toString()
       ctx.body = { url: url.toString() }
     }),
 
