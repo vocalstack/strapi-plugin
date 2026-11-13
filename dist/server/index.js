@@ -124,15 +124,15 @@ class VocalStackAPI {
     form.append("file", file, fileName);
     return this.request("POST", "/v1/transcriptions", form, { "idempotency-key": opts.idempotencyKey });
   }
-  job(recordingId) {
-    return this.request("GET", `/v1/recordings/${encodeURIComponent(recordingId)}/job`);
+  job(transcriptionId) {
+    return this.request("GET", `/v1/transcriptions/${encodeURIComponent(transcriptionId)}/job`);
   }
   /** Stop a job before it is done. Its state becomes `stopped`; what was transcribed so far stays in VocalStack. */
-  stop(recordingId, reason) {
-    return this.request("POST", `/v1/recordings/${encodeURIComponent(recordingId)}/stop`, { reason: reason ?? null });
+  stop(transcriptionId, reason) {
+    return this.request("POST", `/v1/transcriptions/${encodeURIComponent(transcriptionId)}/stop`, { reason: reason ?? null });
   }
-  transcript(recordingId) {
-    return this.request("GET", `/v1/recordings/${encodeURIComponent(recordingId)}/transcript`);
+  transcript(transcriptionId) {
+    return this.request("GET", `/v1/transcriptions/${encodeURIComponent(transcriptionId)}/transcript`);
   }
 }
 function accountLabel(me) {
@@ -263,8 +263,9 @@ class RouteError extends Error {
     this.code = code;
   }
 }
-const FIELDS = ["documentId", "fileId", "fileName", "status", "transcript", "sentences", "language", "error", "recordingId", "transcriptionId", "jobRecordingId", "jobTranscriptionId", "transcribedAt"];
-const jobOf = (t) => t.jobRecordingId ?? (t.status === "processing" ? t.recordingId : void 0) ?? void 0;
+const FIELDS = ["documentId", "fileId", "fileName", "status", "transcript", "sentences", "language", "error", "transcriptionId", "jobTranscriptionId", "transcribedAt"];
+const jobOf = (t) => t.jobTranscriptionId ?? (t.status === "processing" ? t.transcriptionId : void 0) ?? void 0;
+const LEGACY = { jobRecordingId: null, recordingId: null };
 const pick = (entry) => Object.fromEntries(FIELDS.filter((k) => entry?.[k] !== void 0).map((k) => [k, entry?.[k]]));
 function toSentences(t) {
   const sentences = t.sentences.filter((s) => !s.suppressed && s.text.trim()).map(({ end, sentenceId, speaker, start, text }) => ({ id: sentenceId, end, speaker, start, text: text.trim() }));
@@ -310,7 +311,7 @@ const transcriber = ({ strapi: strapi2 }) => {
     save(file, patch) {
       return serially(file.id, async () => {
         const existing = await transcripts().findFirst({ filters: { fileId: { $eq: file.id } } });
-        const data = { ...patch, fileName: file.name ?? null };
+        const data = { ...patch, ...patch.status ? LEGACY : {}, fileName: file.name ?? null };
         const saved = existing?.documentId ? await transcripts().update({ data, documentId: String(existing.documentId) }) : await transcripts().create({ data: { ...data, file: file.id, fileId: file.id } });
         return pick(saved);
       });
@@ -330,7 +331,7 @@ const transcriber = ({ strapi: strapi2 }) => {
       try {
         const tx = isPublicURL(url) ? await client.transcribeURL(url, call) : await client.transcribeFile(await fetchFile(strapi2, file, url), file.name || decodeURIComponent(new URL(url).pathname.split("/").pop() || "audio"), call);
         if (!tx.job) throw new Error("VocalStack did not start a job for this file.");
-        const transcript = await self.save(file, { error: null, jobRecordingId: tx.job.recordingId, jobTranscriptionId: tx.id, status: "processing" });
+        const transcript = await self.save(file, { error: null, jobTranscriptionId: tx.id, status: "processing" });
         return { phase: tx.job.state, progress: 0, status: "processing", transcript };
       } catch (err) {
         throw routeError(err);
@@ -339,11 +340,11 @@ const transcriber = ({ strapi: strapi2 }) => {
     /** Where the file's transcript stands; while a job runs, asks VocalStack and saves the outcome once it is over. */
     async status(fileId) {
       const current = await self.get(fileId);
-      const recordingId = jobOf(current);
-      if (current.status !== "processing" || !recordingId) return { status: current.status ?? "idle", transcript: current };
+      const transcriptionId = jobOf(current);
+      if (current.status !== "processing" || !transcriptionId) return { status: current.status ?? "idle", transcript: current };
       const file = await self.file(fileId);
       try {
-        return await self.checkJob(await api(), file, current, recordingId);
+        return await self.checkJob(await api(), file, current, transcriptionId);
       } catch (err) {
         throw routeError(err);
       }
@@ -354,21 +355,21 @@ const transcriber = ({ strapi: strapi2 }) => {
       const client = await api();
       const current = await self.get(fileId);
       const { status } = current;
-      const recordingId = jobOf(current);
-      if (status !== "processing" || !recordingId) return { status: status ?? "idle", transcript: current };
+      const transcriptionId = jobOf(current);
+      if (status !== "processing" || !transcriptionId) return { status: status ?? "idle", transcript: current };
       try {
-        await client.stop(recordingId, "Stopped from Strapi");
+        await client.stop(transcriptionId, "Stopped from Strapi");
         return await self.restore(file, current);
       } catch (err) {
-        if (err instanceof VocalStackAPIError && err.status === 409) return self.checkJob(client, file, current, recordingId).catch(() => self.restore(file, current));
+        if (err instanceof VocalStackAPIError && err.status === 409) return self.checkJob(client, file, current, transcriptionId).catch(() => self.restore(file, current));
         if (notFound(err)) return self.elsewhere(file);
         throw routeError(err);
       }
     },
     /** Where a job stands, saving the outcome once it is over: the whole transcript when done, the reason when it failed. */
-    async checkJob(client, file, current, recordingId) {
+    async checkJob(client, file, current, transcriptionId) {
       try {
-        return await self.followJob(client, file, current, recordingId);
+        return await self.followJob(client, file, current, transcriptionId);
       } catch (err) {
         if (notFound(err)) return self.elsewhere(file);
         throw err;
@@ -379,25 +380,25 @@ const transcriber = ({ strapi: strapi2 }) => {
      * the transcription was deleted): stop following it and say so. An earlier transcript stays.
      */
     async elsewhere(file) {
-      return { error: ELSEWHERE, status: "failed", transcript: await self.save(file, { error: ELSEWHERE, jobRecordingId: null, jobTranscriptionId: null, status: "failed" }) };
+      return { error: ELSEWHERE, status: "failed", transcript: await self.save(file, { error: ELSEWHERE, jobTranscriptionId: null, status: "failed" }) };
     },
-    async followJob(client, file, current, recordingId) {
-      const job = await client.job(recordingId);
+    async followJob(client, file, current, transcriptionId) {
+      const job = await client.job(transcriptionId);
       if (job.state === "stopped" || job.state === "failed" && job.errorCode === "stopped") return self.restore(file, current);
       if (job.state === "failed" || job.state === "cropping") {
         const error = job.state === "cropping" ? "VocalStack is waiting for a crop window; open the transcription in VocalStack." : job.error ?? "The transcription failed.";
-        return { error, status: "failed", transcript: await self.save(file, { error, jobRecordingId: null, jobTranscriptionId: null, status: "failed" }) };
+        return { error, status: "failed", transcript: await self.save(file, { error, jobTranscriptionId: null, status: "failed" }) };
       }
       if (job.state !== "done") {
         const progress = job.state === "fetching" ? job.progress.phasePct ?? 0 : job.progress.pct;
         const audio = job.state === "transcribing" ? { processedS: job.progress.processedS ?? 0, totalS: job.progress.totalS ?? void 0 } : void 0;
         return { audio, phase: job.progress.phase ?? job.state, progress, status: "processing" };
       }
-      let saving = finishing.get(recordingId);
+      let saving = finishing.get(transcriptionId);
       if (!saving) {
-        saving = self.saveTranscript(client, file, current, recordingId);
-        finishing.set(recordingId, saving);
-        void saving.catch(() => void 0).then(() => finishing.delete(recordingId));
+        saving = self.saveTranscript(client, file, transcriptionId);
+        finishing.set(transcriptionId, saving);
+        void saving.catch(() => void 0).then(() => finishing.delete(transcriptionId));
       }
       return saving;
     },
@@ -407,22 +408,20 @@ const transcriber = ({ strapi: strapi2 }) => {
      */
     async restore(file, current) {
       const status = current.transcript ? "done" : "idle";
-      return { status, stopped: true, transcript: await self.save(file, { error: null, jobRecordingId: null, jobTranscriptionId: null, status }) };
+      return { status, stopped: true, transcript: await self.save(file, { error: null, jobTranscriptionId: null, status }) };
     },
-    async saveTranscript(client, file, current, recordingId) {
-      const transcript = await client.transcript(recordingId);
+    async saveTranscript(client, file, transcriptionId) {
+      const transcript = await client.transcript(transcriptionId);
       const sentences = toSentences(transcript);
       const saved = await self.save(file, {
         error: null,
-        jobRecordingId: null,
         jobTranscriptionId: null,
         language: transcript.lang ?? transcript.sentences.find((s) => s.language)?.language ?? null,
         sentences,
         status: "done",
         transcribedAt: (/* @__PURE__ */ new Date()).toISOString(),
         transcript: transcriptText(sentences),
-        transcriptionId: current.jobTranscriptionId ?? current.transcriptionId ?? null,
-        recordingId
+        transcriptionId
       });
       return { progress: 100, status: "done", transcript: saved };
     },
@@ -443,11 +442,11 @@ const transcriber = ({ strapi: strapi2 }) => {
       const running = await transcripts().findMany({ filters: { status: { $eq: "processing" } }, limit: 100 });
       for (const row of running) {
         const current = pick(row);
-        const recordingId = jobOf(current);
-        if (!recordingId || !current.fileId) continue;
+        const transcriptionId = jobOf(current);
+        if (!transcriptionId || !current.fileId) continue;
         try {
           const file = await strapi2.db.query(FILE_UID).findOne({ where: { id: current.fileId } });
-          if (file) await self.checkJob(client, file, current, recordingId);
+          if (file) await self.checkJob(client, file, current, transcriptionId);
         } catch (err) {
           strapi2.log.debug(`[vocalstack] checking file ${current.fileId}: ${err.message}`);
         }

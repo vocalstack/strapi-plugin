@@ -167,7 +167,7 @@ async function main() {
   const consoleErrors = []
   page.on('pageerror', (e) => consoleErrors.push(e.message))
 
-  let file, documentId, firstText, firstRecording
+  let file, documentId, firstText, firstTranscription
   try {
     await step('log in', async () => {
       await login(page)
@@ -255,8 +255,8 @@ async function main() {
         const check = plausibleEnglish(t.transcript)
         assert(check.ok, `does not read as English (${check.words} words, ${check.common} common): ${JSON.stringify(t.transcript)}`)
         firstText = t.transcript
-        firstRecording = t.recordingId
-        assert(firstRecording && !t.jobRecordingId, `done, but recordingId ${t.recordingId} / jobRecordingId ${t.jobRecordingId}`)
+        firstTranscription = t.transcriptionId
+        assert(firstTranscription && !t.jobTranscriptionId && !t.recordingId && !t.jobRecordingId, `done, but transcriptionId ${t.transcriptionId} / jobTranscriptionId ${t.jobTranscriptionId} / recordingId ${t.recordingId}`)
         return `${check.words} words, language ${t.language}: ${JSON.stringify(t.transcript)}`
       })
 
@@ -273,7 +273,7 @@ async function main() {
         await page.getByText(firstText.split('\n')[0].slice(0, 30)).first().waitFor({ timeout: 30000 })
         await shot(page, 'transcript-entry')
         await page.goBack()
-        return `${one.sentences.length} sentences, recording ${one.recordingId}`
+        return `${one.sentences.length} sentences, transcription ${one.transcriptionId}`
       })
     }
 
@@ -289,26 +289,26 @@ async function main() {
         const t = await transcriptOf(file.id)
         assert(t.status === 'done', `after Stop the entry is ${t.status}, not done`)
         assert(t.transcript === firstText, 'Stop changed the earlier transcript')
-        assert(t.recordingId === firstRecording, `after Stop the entry points at recording ${t.recordingId}, not the transcript's ${firstRecording}`)
+        assert(t.transcriptionId === firstTranscription, `after Stop the entry points at transcription ${t.transcriptionId}, not the transcript's ${firstTranscription}`)
         // And it stays stopped: the server's poller must not bring the stopped job's outcome back.
         await new Promise((r) => setTimeout(r, 12000))
         const later = await transcriptOf(file.id)
         assert(later.status === 'done' && later.transcript === firstText, `12 s after Stop the entry is ${later.status}`)
-        return 'stopped; entry back to done with the first transcript and its recording'
+        return 'stopped; entry back to done with the first transcript and its transcription'
       })
 
       if (VS_API_URL && VS_API_KEY) {
         await step('a job stopped in VocalStack (not from Strapi) ends the run here too', async () => {
           const [res] = await Promise.all([page.waitForResponse((r) => r.url().includes(`/vocalstack/transcribe/${file.id}`)), page.getByRole('button', { name: /transcribe again/i }).click()])
-          const recordingId = (await res.json()).transcript?.jobRecordingId
-          assert(recordingId, `the start answered no jobRecordingId: ${JSON.stringify(await res.json())}`)
-          const stopped = await fetch(`${VS_API_URL}/v1/recordings/${recordingId}/stop`, { body: '{}', headers: { authorization: `Bearer ${VS_API_KEY}`, 'content-type': 'application/json' }, method: 'POST' })
+          const transcriptionId = (await res.json()).transcript?.jobTranscriptionId
+          assert(transcriptionId, `the start answered no jobTranscriptionId: ${JSON.stringify(await res.json())}`)
+          const stopped = await fetch(`${VS_API_URL}/v1/transcriptions/${transcriptionId}/stop`, { body: '{}', headers: { authorization: `Bearer ${VS_API_KEY}`, 'content-type': 'application/json' }, method: 'POST' })
           assert(stopped.ok, `VocalStack refused the stop: ${stopped.status} ${await stopped.text()}`)
           await page.getByRole('button', { name: /transcribe again/i }).waitFor({ timeout: 30000 })
           await shot(page, 'stopped-in-vocalstack')
           const t = await transcriptOf(file.id)
-          assert(t.status === 'done' && t.transcript === firstText && t.recordingId === firstRecording, `the entry is ${t.status}, recording ${t.recordingId}`)
-          return `recording ${recordingId} stopped over the API; the panel and entry went back to the first transcript`
+          assert(t.status === 'done' && t.transcript === firstText && t.transcriptionId === firstTranscription, `the entry is ${t.status}, transcription ${t.transcriptionId}`)
+          return `transcription ${transcriptionId} stopped over the API; the panel and entry went back to the first transcript`
         })
       }
     }

@@ -27,19 +27,19 @@ declare const transcriber: ({ strapi }: {
     /** Stop the job. The transcript goes back to how it was; VocalStack keeps what it transcribed so far. */
     stop(fileId: number): Promise<StatusResponse>;
     /** Where a job stands, saving the outcome once it is over: the whole transcript when done, the reason when it failed. */
-    checkJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
+    checkJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, transcriptionId: string): Promise<StatusResponse>;
     /**
      * The job is not there for the connected key (the connection moved to another workspace, or
      * the transcription was deleted): stop following it and say so. An earlier transcript stays.
      */
     elsewhere(file: UploadFile): Promise<StatusResponse>;
-    followJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
+    followJob(client: VocalStackAPI, file: UploadFile, current: TranscriptData, transcriptionId: string): Promise<StatusResponse>;
     /**
      * A stopped job leaves the entry as it was before Transcribe: the earlier transcript, if
      * there was one (a new job only replaces it once done), or none.
      */
     restore(file: UploadFile, current: TranscriptData): Promise<StatusResponse>;
-    saveTranscript(client: VocalStackAPI, file: UploadFile, current: TranscriptData, recordingId: string): Promise<StatusResponse>;
+    saveTranscript(client: VocalStackAPI, file: UploadFile, transcriptionId: string): Promise<StatusResponse>;
     /** Statuses for several files at once (the Media Library list and the side panel). */
     many(fileIds: number[]): Promise<Record<number, TranscriptData>>;
     /**

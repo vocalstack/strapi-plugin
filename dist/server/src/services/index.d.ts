@@ -22,11 +22,11 @@ declare const _default: {
         start(fileOrId: number | import('../lib/types').UploadFile, origin?: string): Promise<import('../lib/types').StatusResponse>;
         status(fileId: number): Promise<import('../lib/types').StatusResponse>;
         stop(fileId: number): Promise<import('../lib/types').StatusResponse>;
-        checkJob(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData, recordingId: string): Promise<import('../lib/types').StatusResponse>;
+        checkJob(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData, transcriptionId: string): Promise<import('../lib/types').StatusResponse>;
         elsewhere(file: import('../lib/types').UploadFile): Promise<import('../lib/types').StatusResponse>;
-        followJob(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData, recordingId: string): Promise<import('../lib/types').StatusResponse>;
+        followJob(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData, transcriptionId: string): Promise<import('../lib/types').StatusResponse>;
         restore(file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData): Promise<import('../lib/types').StatusResponse>;
-        saveTranscript(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, current: import('../lib/types').TranscriptData, recordingId: string): Promise<import('../lib/types').StatusResponse>;
+        saveTranscript(client: import('../lib/api').VocalStackAPI, file: import('../lib/types').UploadFile, transcriptionId: string): Promise<import('../lib/types').StatusResponse>;
         many(fileIds: number[]): Promise<Record<number, import('../lib/types').TranscriptData>>;
         pollAll(): Promise<void>;
         forget(fileId: number): Promise<void>;

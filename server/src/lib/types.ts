@@ -55,15 +55,13 @@ export type TranscriptData = {
   error?: null | string
   fileId?: number
   fileName?: null | string
-  /** The running job's recording and transcription, while `status` is `processing`. */
-  jobRecordingId?: null | string
+  /** The running job's transcription, while `status` is `processing`. */
   jobTranscriptionId?: null | string
   language?: null | string
-  /** The recording and transcription the saved `transcript` came from. */
-  recordingId?: null | string
   sentences?: null | TranscriptSentence[]
   status?: null | TranscriptStatus
   transcript?: null | string
+  /** The transcription the saved `transcript` came from. */
   transcriptionId?: null | string
   transcribedAt?: null | string
 }

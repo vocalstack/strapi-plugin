@@ -33,7 +33,7 @@ Super Admins can use everything. For other roles, tick **Settings → Roles → 
 - **A Transcript collection type** (`plugin::vocalstack.transcript`), one entry per transcribed file, listed under **Content Manager → Transcript**:
   - `transcript`: text you can edit; paragraphs break on a speaker change or a pause.
   - `sentences`: `[{ start, end, speaker, text }]` in seconds.
-  - `file` (the media), `fileId`, `fileName`, `status` (`idle`, `processing`, `done`, `failed`), `language`, `error`, `recordingId` and `transcriptionId` (where the saved transcript came from), `jobRecordingId` and `jobTranscriptionId` (the running job's, while `processing`) and `transcribedAt`.
+  - `file` (the media), `fileId`, `fileName`, `status` (`idle`, `processing`, `done`, `failed`), `language`, `error`, `transcriptionId` (the VocalStack transcription the saved transcript came from), `jobTranscriptionId` (the running job's, while `processing`) and `transcribedAt`. `recordingId` and `jobRecordingId` are left from versions before 0.3.0: VocalStack's API no longer has recordings, so the plugin no longer reads them and clears them the next time it saves the entry.
   - It is deleted with its file.
 - **Admin routes** (signed with the admin's token): `POST /vocalstack/transcribe/:fileId`, `POST /vocalstack/stop/:fileId`, `GET /vocalstack/status/:fileId`, `GET /vocalstack/files`, `GET /vocalstack/connection` (`{ connected, source, account, workspace: { id, name, personal, iconUrl } }`; `?check=1` asks VocalStack for the workspace again and gives its icon as a `data:` URL, which Strapi's default content security policy allows), and the connect routes below.
 

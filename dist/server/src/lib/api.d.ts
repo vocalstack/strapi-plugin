@@ -17,7 +17,6 @@ export type Job = {
         processedS?: number;
         totalS?: null | number;
     };
-    recordingId: string;
     state: JobState;
     transcriptionId: string;
 };
@@ -70,10 +69,10 @@ export declare class VocalStackAPI {
         name: string;
         spokenLanguage?: string;
     }): Promise<Transcription>;
-    job(recordingId: string): Promise<Job>;
+    job(transcriptionId: string): Promise<Job>;
     /** Stop a job before it is done. Its state becomes `stopped`; what was transcribed so far stays in VocalStack. */
-    stop(recordingId: string, reason?: string): Promise<unknown>;
-    transcript(recordingId: string): Promise<Transcript>;
+    stop(transcriptionId: string, reason?: string): Promise<unknown>;
+    transcript(transcriptionId: string): Promise<Transcript>;
 }
 /** A short label for the connected account, from whatever `/v1/me` carries (used when it names no workspace). */
 export declare function accountLabel(me: Record<string, unknown>): string | undefined;

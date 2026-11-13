@@ -259,6 +259,7 @@ test('a running job that is in another workspace ends with a plain sentence, and
   assert.match(c.body.error, /Transcribe the file again/);
   assert.equal(state.entry?.status, 'failed');
   assert.equal(state.entry?.jobRecordingId, null);
+  assert.equal(state.entry?.jobTranscriptionId, null);
   assert.equal(state.entry?.transcript, 'An earlier transcript.');
 
   state.entry = { ...entry };
@@ -270,4 +271,49 @@ test('a running job that is in another workspace ends with a plain sentence, and
   state.entry = { ...entry };
   await services.transcriber.pollAll();
   assert.equal(state.entry?.status, 'failed');
+});
+
+const DONE_JOB = { attempts: 1, createdAt: '2026-11-13T00:00:00Z', hasAudio: true, progress: { pct: 100 }, state: 'done', transcriptionId: 'tx_run' };
+const TRANSCRIPT = { lang: 'en', segments: [], sentences: [{ end: 2, sentenceId: 0, speaker: 0, start: 0, text: 'Hello there.' }] };
+
+test('a job saved by 0.2 (with its recording) is followed by its transcription; the recording columns are cleared once done', async () => {
+  const calls = vocalstack({
+    'GET /v1/transcriptions/tx_run/job': () => ({ body: DONE_JOB }),
+    'GET /v1/transcriptions/tx_run/transcript': () => ({ body: TRANSCRIPT }),
+  });
+  const entry = { documentId: 'd1', fileId: 5, jobRecordingId: 'rec_run', jobTranscriptionId: 'tx_run', recordingId: 'rec_old', status: 'processing', transcriptionId: 'tx_old' };
+  const { controller, state } = strapiWith({}, { apiKey: 'vs_key' }, entry);
+  const c = ctx({ params: { fileId: '5' } });
+  await controller.status(c);
+  assert.equal(c.body.status, 'done');
+  assert.equal(state.entry.transcript, 'Hello there.');
+  assert.equal(state.entry.transcriptionId, 'tx_run');
+  assert.equal(state.entry.jobTranscriptionId, null);
+  assert.equal(state.entry.recordingId, null);
+  assert.equal(state.entry.jobRecordingId, null);
+  assert.equal('recordingId' in c.body.transcript, false);
+  assert.equal(calls.some((x) => x.url.includes('/v1/recordings/')), false);
+});
+
+test('a job saved by 0.1 (recordingId and transcriptionId while processing) is stopped by its transcription', async () => {
+  const calls = vocalstack({ 'POST /v1/transcriptions/tx_run/stop': () => ({ body: { id: 'tx_run' } }) });
+  const entry = { documentId: 'd1', fileId: 5, recordingId: 'rec_run', status: 'processing', transcriptionId: 'tx_run' };
+  const { controller, state } = strapiWith({}, { apiKey: 'vs_key' }, entry);
+  const c = ctx({ params: { fileId: '5' } });
+  await controller.stop(c);
+  assert.equal(c.body.status, 'idle');
+  assert.equal(c.body.stopped, true);
+  assert.equal(state.entry.recordingId, null);
+  assert.deepEqual(calls.map((x) => `${x.method} ${new URL(x.url).pathname}`), ['POST /v1/transcriptions/tx_run/stop']);
+});
+
+test('a finished transcript saved with only a recording id stays as it was, and asks VocalStack nothing', async () => {
+  const calls = vocalstack({});
+  const entry = { documentId: 'd1', fileId: 5, recordingId: 'rec_old', status: 'done', transcript: 'Kept.' };
+  const { controller } = strapiWith({}, { apiKey: 'vs_key' }, entry);
+  const c = ctx({ params: { fileId: '5' } });
+  await controller.status(c);
+  assert.equal(c.body.status, 'done');
+  assert.equal(c.body.transcript.transcript, 'Kept.');
+  assert.equal(calls.length, 0);
 });
